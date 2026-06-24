@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Shura Core – Texte</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/wink-nlp/dist/wink-nlp.min.js"></script>
+    <script src="https://unpkg.com/wink-eng-lite-web-model/dist/wink-eng-lite-web-model.min.js"></script>
+    <style>
+        html, body { height: 100%; overflow: hidden; }
+        body { background: #12161a; color: #e2e8f0; font-family: system-ui, sans-serif; overscroll-behavior-y: none; }
+        .cyber { background: linear-gradient(145deg, #161b22, #0f1318); box-shadow: 5px 5px 15px #0a0d10, -5px -5px 15px #1a212a; }
+        .node-btn { transition: all .3s; box-shadow: 3px 3px 8px #0a0d10, -3px -3px 8px #1a212a; }
+        .playing::after { content: ''; position: absolute; inset: -4px; border: 2px solid currentColor; border-radius: 9999px; animation: pulse-ring 1.2s infinite; }
+        @keyframes pulse-ring { 0% { transform: scale(.95); opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
+        .longest .node-btn { box-shadow: 0 0 18px currentColor, 0 0 36px rgba(0,0,0,.4); filter: brightness(1.3); }
+        .longest-label { font-weight: 800; color: #fff; text-shadow: 0 0 6px currentColor; }
+        body.move #tree button { pointer-events: none !important; }
+        .sel-move { outline: 3px solid white; outline-offset: 6px; border-radius: 12px; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(34,211,238,.5); } 70% { box-shadow: 0 0 0 8px rgba(34,211,238,0); } 100% { box-shadow: 0 0 0 0 rgba(34,211,238,0); } }
+        .move-ind { animation: pulse 1.5s infinite; }
+        .stat { background: rgba(6,182,212,.15); border: 1px solid rgba(6,182,212,.3); }
+        .kbd .node-btn { outline: 3px solid #fbbf24; outline-offset: 5px; border-radius: 12px; }
+        .focus { background: #a855f7 !important; color: #fff; }
+        #tree {
+            position: relative; width: 100%; height: 100%; overflow: auto; z-index: 20;
+            touch-action: pan-x pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+            transition: opacity .1s ease, transform .1s ease; transform-origin: top left; cursor: grab;
+        }
+        #tree:active { cursor: grabbing; }
+        #tree button, #tree canvas { touch-action: none; }
+        .sentiment { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-left: 4px; vertical-align: middle; }
+        #load { position: fixed; inset: 0; background: #12161a; display: flex; align-items: center; justify-content: center; z-index: 100; }
+        .loader { width: 40px; height: 40px; border: 4px solid #06b6d4; border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .del-btn { transition: all .2s; }
+        .admin-badge { background: #f59e0b; color: #000; font-size: 9px; padding: 1px 4px; border-radius: 4px; margin-left: 4px; }
+        .zoom-btn { font-weight: bold; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; }
+    </style>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#4b6cb7">
+<link rel="apple-touch-icon" href="icon.png"></head>
+<body class="w-screen h-screen flex flex-col select-none">
+<div id="load"><div class="loader"></div></div>
+
+<header class="w-full p-4 cyber flex flex-col gap-2">
+    <div class="flex flex-wrap justify-between items-center gap-2">
+        <div><h1 class="text-sm font-bold uppercase text-cyan-400">Shura Core</h1><p class="text-xs text-gray-400">+ Branch pour répondre</p></div>
+        <div class="flex gap-2 flex-wrap items-center">
+            <input id="search" placeholder="Rechercher" class="px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-white text-xs w-28" />
+            <button id="btnHome" class="px-3 py-2 bg-gray-700 rounded text-xs font-bold text-gray-300" title="Revenir à la racine">
+                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+            </button>
+            <button id="btnFocus" class="px-3 py-2 bg-gray-700 rounded text-xs font-bold text-gray-300">Focus</button>
+            <button id="btnMove" class="px-3 py-2 bg-gray-700 rounded text-xs font-bold text-gray-300">Déplacer</button>
+            <button id="btnLongest" class="px-3 py-2 bg-yellow-600 rounded text-xs font-bold text-white">Lire branche</button>
+            <button id="btnRoot" class="px-3 py-2 bg-cyan-600 rounded text-xs font-bold text-white">+ Shura</button>
+            <button id="btnExport" class="px-3 py-2 bg-purple-600 rounded text-xs font-bold text-white">Export</button>
+            <button id="btnReset" class="px-3 py-2 bg-red-700 rounded text-xs font-bold text-white">Reset</button>
+            <div class="flex gap-1">
+                <button id="btnZoomIn" class="zoom-btn bg-gray-700 rounded text-xs font-bold text-gray-300" title="Zoom avant">+</button>
+                <button id="btnZoomOut" class="zoom-btn bg-gray-700 rounded text-xs font-bold text-gray-300" title="Zoom arrière">-</button>
+            </div>
+        </div>
+    </div>
+    <div id="moveBanner" class="hidden text-[11px] text-cyan-300 font-bold text-center py-1 rounded bg-cyan-900/40 border border-cyan-800 move-ind">Mode déplacement activé</div>
+    <div class="flex gap-2 text-[10px] text-gray-400">
+        <span class="stat px-2 py-0.5 rounded-full">🌳 <span id="depth">0</span></span>
+        <span class="stat px-2 py-0.5 rounded-full">🌿 <span id="branches">0</span></span>
+        <span id="limitDisp" class="stat px-2 py-0.5 rounded-full">📝 Illimitée</span>
+        <span class="stat px-2 py-0.5 rounded-full">🔍 <span id="zoomLevel">100%</span></span>
+    </div>
+</header>
+
+<main class="relative w-full flex-1 overflow-hidden bg-[#0d1013]">
+    <div id="tree"></div>
+    <svg id="lines" class="absolute inset-0 w-full h-full pointer-events-none z-10"></svg>
+</main>
+
+<!-- Modale de confirmation (suppression / reset) -->
+<div id="confirmModal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center hidden p-4">
+    <div class="cyber p-6 rounded-2xl w-full max-w-sm border border-gray-800 flex flex-col gap-4">
+        <p id="confirmMessage" class="text-sm text-gray-200 text-center"></p>
+        <div class="flex gap-2 justify-center">
+            <button id="btnConfirmYes" class="px-4 py-2 bg-red-600 rounded text-xs font-bold text-white">Confirmer</button>
+            <button id="btnConfirmNo" class="px-4 py-2 bg-gray-700 rounded text-xs font-bold text-white">Annuler</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modale saisie -->
+<div id="inputModal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center hidden p-4">
+    <div class="cyber p-6 rounded-2xl w-full max-w-lg border border-gray-800 flex flex-col gap-3">
+        <h3 id="modalTitle" class="text-sm font-bold uppercase text-gray-300 text-center"></h3>
+        <input id="nodeTitle" placeholder="Titre (optionnel)" class="w-full px-4 py-3 rounded bg-[#0d1013] border border-gray-800 text-white text-sm" />
+        <div id="rootOpts" class="hidden flex-col gap-2">
+            <label class="text-[10px] uppercase text-gray-500 font-bold">Limite de caractères</label>
+            <select id="charLimit" class="w-full px-4 py-2 rounded bg-[#0d1013] border border-gray-800 text-white text-sm">
+                <option value="0">Illimité</option><option value="500">500</option><option value="1000">1000</option><option value="2000">2000</option><option value="5000">5000</option>
+            </select>
+        </div>
+        <textarea id="textContent" placeholder="Votre contribution..." class="w-full px-4 py-3 rounded bg-[#0d1013] border border-gray-800 text-white text-sm h-32 resize-none"></textarea>
+        <div class="flex justify-between text-[10px] text-gray-500"><span id="charCount">0 / --</span><span id="charWarn" class="hidden text-red-400">Dépassé</span></div>
+        <div class="flex gap-2 pt-2"><button id="btnCancel" class="flex-1 py-2.5 bg-gray-800 rounded text-xs font-semibold text-gray-400">Annuler</button><button id="btnValid" class="flex-1 py-2.5 bg-cyan-600 rounded text-xs font-semibold text-white opacity-50" disabled>Valider</button></div>
+    </div>
+</div>
+
+<!-- Modale lecture -->
+<div id="viewModal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center hidden p-4">
+    <div class="cyber p-6 rounded-2xl w-full max-w-lg border border-gray-800 flex flex-col gap-3">
+        <h3 id="viewTitle" class="text-sm font-bold text-cyan-300"></h3>
+        <div id="viewContent" class="text-sm text-gray-200 max-h-[60vh] overflow-y-auto whitespace-pre-wrap"></div>
+        <div class="flex justify-between text-[10px] text-gray-500"><span id="viewAuthor"></span><span id="viewSentiment"></span></div>
+        <button onclick="document.getElementById('viewModal').classList.add('hidden')" class="self-end px-4 py-2 bg-gray-700 rounded text-xs font-bold text-white">Fermer</button>
+    </div>
+</div>
+
+<!-- Modale branche maîtresse -->
+<div id="branchModal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center hidden p-4">
+    <div class="cyber p-6 rounded-2xl w-full max-w-2xl border border-gray-800 flex flex-col gap-3 max-h-[80vh] overflow-y-auto">
+        <h3 class="text-sm font-bold text-yellow-400">Branche maîtresse</h3>
+        <div id="branchContent" class="space-y-4"></div>
+        <button onclick="document.getElementById('branchModal').classList.add('hidden')" class="self-end px-4 py-2 bg-gray-700 rounded text-xs font-bold text-white">Fermer</button>
+    </div>
+</div>
+
+<footer class="w-full p-4 cyber border-t border-gray-800 flex flex-col items-center gap-2">
+    <span class="text-[10px] uppercase text-gray-500 font-bold">Simulateur</span>
+    <div id="users" class="grid grid-cols-4 gap-2 w-full max-w-md"></div>
+    <div id="pending" class="hidden w-full max-w-md space-y-2"></div>
+</footer>
+
+<script>
+// ========= ÉTAT =========
+const S = {
+    nodes: [], map: {}, user: null, charLimit: 0, search: '', focus: false, move: false, moveNode: null, sel: null,
+    zoom: 1,
+    rebuild() { this.map = {}; this.nodes.forEach(n => this.map[n.id] = n) },
+    isAdmin() { return this.user && this.user.admin }
+};
+const USERS = [
+    { id: 'u1', name: 'Brahim', color: '#06b6d4' },
+    { id: 'u2', name: 'Samy', color: '#ec4899' },
+    { id: 'u3', name: 'Yanis', color: '#10b981' },
+    { id: 'u4', name: 'Lina', color: '#f59e0b', admin: true }
+];
+
+// ========= BDD =========
+const DB = {
+    db: null,
+    async open() {
+        if (this.db) return this.db;
+        return new Promise((ok, ko) => {
+            const r = indexedDB.open('shuraTxt',1);
+            r.onupgradeneeded = e => { if (!e.target.result.objectStoreNames.contains('n')) e.target.result.createObjectStore('n',{keyPath:'id'}) };
+            r.onsuccess = e => { this.db = e.target.result; ok(this.db) };
+            r.onerror = () => ko();
+        });
+    },
+    async all() { await this.open(); return new Promise((ok,ko) => { const t = this.db.transaction('n','readonly'); const q = t.objectStore('n').getAll(); q.onsuccess = () => ok(q.result||[]); q.onerror = ko }) },
+    async put(n) { await this.open(); return new Promise((ok,ko) => { const t = this.db.transaction('n','readwrite'); t.objectStore('n').put(n); t.oncomplete = ok; t.onerror = ko }) },
+    async del(id) { await this.open(); return new Promise((ok,ko) => { const t = this.db.transaction('n','readwrite'); t.objectStore('n').delete(id); t.oncomplete = ok; t.onerror = ko }) }
+};
+
+// ========= NLP =========
+const NLP = {
+    nlp: null, its: null,
+    async init() {
+        try { this.nlp = winkNLP(winkEngLiteWebModel); this.its = this.nlp.its; console.log('NLP ok') } catch(e) { console.warn('NLP off') }
+    },
+    analyze(text) {
+        if (!this.nlp || !text) return { keywords:[], sentiment:0, summary:'' };
+        try {
+            const doc = this.nlp.readDoc(text);
+            const keywords = doc.tokens().filter(t => t.out(this.its.pos)==='NOUN'||t.out(this.its.pos)==='PROPN').out(this.its.normal).filter((v,i,a)=>a.indexOf(v)===i).slice(0,10);
+            const sentiment = doc.out(this.its.sentiment)||0;
+            const sents = doc.sentences().out();
+            let summary = '';
+            if (sents.length) {
+                const stop = new Set(['the','is','at','which','on','a','an','and','or','but','in','with','to','for','of','that','this','was','are','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','shall','can','need','dare','ought','used','to','from','up','down','out','about','over','under','again','further','then','once','here','there','when','where','why','how','all','both','each','few','more','most','other','some','such','no','nor','not','only','own','same','so','than','too','very','s','t','just','don','now']);
+                const freq = {};
+                doc.tokens().each(t => { const n = t.out(this.its.normal).toLowerCase(); if (!stop.has(n)&&n.length>1) freq[n]=(freq[n]||0)+1 });
+                const scored = sents.map(s => { const sd = this.nlp.readDoc(s); let sc=0; sd.tokens().each(t => { sc += freq[t.out(this.its.normal).toLowerCase()]||0 }); return {text:s,score:sc} });
+                scored.sort((a,b)=>b.score-a.score);
+                if (scored[0].score>0) summary = scored[0].text;
+            }
+            return {keywords, sentiment, summary};
+        } catch(e) { return {keywords:[], sentiment:0, summary:''} }
+    }
+};
+
+// ========= RENDU ARBRE =========
+const R = {
+    tree: document.getElementById('tree'), svg: document.getElementById('lines'),
+    render() {
+        this.tree.classList.add('opacity-0');
+        requestAnimationFrame(() => {
+            this._renderImpl();
+            requestAnimationFrame(() => { this.tree.classList.remove('opacity-0'); });
+        });
+    },
+    _renderImpl() {
+        this.tree.innerHTML = '';
+        const approved = S.nodes.filter(n => n.status==='approved');
+        if (!approved.length) { this.svg.innerHTML=''; U.stats(0,0); return }
+        const struct = this._build(approved);
+        const longIds = this.longest(struct, struct.roots);
+        const longSet = new Set(longIds);
+        let renderNodes = approved;
+        if (S.focus) renderNodes = renderNodes.filter(n => longSet.has(n.id));
+        if (S.search) renderNodes = renderNodes.filter(n => U.match(n));
+        const rs = this._build(renderNodes);
+        let x = 0; const lh=160, nw=110, gap=80;
+        const pos = (node, d) => { node.y = 40+d*lh; if (!node.children.length) { node.x = x; x+= nw } else { node.children.forEach(c => pos(c,d+1)); node.x = (node.children[0].x+node.children[node.children.length-1].x)/2 } };
+        rs.roots.forEach((r,i) => { pos(r,0); if (i<rs.roots.length-1) x+= gap });
+        const byD = {}; const coll = (n,d) => { (byD[d]=byD[d]||[]).push(n); n.children.forEach(c=>coll(c,d+1)) };
+        rs.roots.forEach(r=>coll(r,0));
+        for (const d in byD) { const arr = byD[d].sort((a,b)=>a.x-b.x); for (let i=0;i<arr.length-1;i++) if (arr[i+1].x-arr[i].x < nw+15) { const sh = nw+15-(arr[i+1].x-arr[i].x); for (let j=i+1;j<arr.length;j++) this._shift(arr[j],sh) } }
+        let minX=0, maxX=0; renderNodes.forEach(n => { const nd = rs.map[n.id]; if (nd.x<minX) minX=nd.x; if (nd.x>maxX) maxX=nd.x });
+        const offX = 60-minX; renderNodes.forEach(n => rs.map[n.id].x+=offX); maxX+=offX;
+        const totW = maxX+nw+100, left = totW>window.innerWidth?0:(window.innerWidth/2)-((maxX-nw)/2)-45;
+        const maxD = longIds.length; U.stats(maxD, approved.length);
+        if (S.sel && !renderNodes.some(n => n.id===S.sel)) U.kbdSel(null);
+
+        renderNodes.forEach(node => {
+            const nd = rs.map[node.id];
+            const el = document.createElement('div'); el.id='dom-'+node.id;
+            el.className = 'absolute flex flex-col items-center justify-center z-30 w-[95px]';
+            el.style.left = (nd.x+left)+'px'; el.style.top = nd.y+'px';
+            const isLong = longSet.has(node.id);
+            const cls = isLong?'longest':''; const tcls = isLong?'longest-label':'text-gray-300';
+            const sent = node.sentiment||0, sc = sent>0.2?'#10b981':(sent<-0.2?'#ef4444':'#9ca3af'), se = sent>0.3?'😊':(sent<-0.3?'😠':'😐');
+            const leafIcon = `<path d="M14.5 3.5c-3.3 0-6.3 2-7.6 5-.3.7-.5 1.5-.5 2.3 0 3.5 2.8 6.3 6.3 6.3.8 0 1.6-.2 2.3-.5 3-1.3 5-4.3 5-7.6 0-.5-.1-1-.2-1.5-.3-1.3-.8-2.4-1.5-3.1-.7-.7-1.8-1.2-3.1-1.5-.5-.1-1-.2-1.5-.2z" fill="currentColor"/>`;
+            const delIcon = `<path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/>`;
+            const deleted = node.deletedByAdmin ? '<span class="text-red-400 text-[8px] ml-1">(supprimé)</span>' : '';
+
+            // Bouton Supprimer visible seulement si l'utilisateur a le droit
+            const showDelete = S.isAdmin() || (node.user.id === S.user.id && !U.hasChildren(node.id));
+            const deleteBtnHTML = showDelete ? `<button class="del-btn px-1.5 py-0.5 rounded bg-red-900/30 border border-red-800 text-[9px] font-bold text-red-300 hover:text-white" onclick="U.deleteNode('${node.id}')"><svg class="w-3 h-3 fill-current" viewBox="0 0 24 24">${delIcon}</svg></button>` : '';
+
+            el.innerHTML = `<div class="text-[10px] font-bold text-center truncate w-full mb-1 ${tcls}" title="${node.summary||''}">${node.title}${deleted}<span class="sentiment" style="background:${sc}" title="${se}"></span></div>
+            <button class="node-btn relative w-12 h-12 rounded-full flex items-center justify-center border-2 bg-[#161b22] ${cls}" style="border-color:${node.user.color};color:${node.user.color}" onclick="U.view('${node.id}')"><svg class="w-5 h-5 fill-current" viewBox="0 0 24 24">${leafIcon}</svg></button>
+            <span class="text-[8px] mt-0.5 text-gray-500">${node.user.name}${node.user.admin ? '<span class="admin-badge">Admin</span>' : ''}</span>
+            <div class="flex gap-1 mt-1">
+                <button class="px-1.5 py-0.5 rounded bg-gray-800/80 border border-gray-700 text-[9px] font-bold text-gray-400 hover:text-white" onclick="U.input('${node.id}')">+ Branch</button>
+                ${deleteBtnHTML}
+            </div>`;
+            el.addEventListener('click', e => { if (S.move) { e.stopPropagation(); U.moveClick(node.id) } });
+            this.tree.appendChild(el);
+        });
+
+        this.tree.style.transform = `scale(${S.zoom})`;
+        this.tree.style.minWidth = (totW * S.zoom) + 'px';
+        this.tree.style.minHeight = ((maxD * 160 + 200) * S.zoom) + 'px';
+        setTimeout(()=>this.lines(rs,longSet),50);
+    },
+    _build(nodes) { const m={}, roots=[]; nodes.forEach(n=>m[n.id]={...n,children:[]}); nodes.forEach(n=>{ if(n.parentId&&m[n.parentId]) m[n.parentId].children.push(m[n.id]); else roots.push(m[n.id]) }); return {map:m, roots} },
+    _shift(n,dx) { n.x+=dx; n.children.forEach(c=>this._shift(c,dx)) },
+    longest(s,roots) { let best=[]; const dfs=(id,path)=>{ const node=s.map[id]; const np=[...path,id]; if(!node.children.length) { if(np.length>best.length) best=np } else node.children.forEach(c=>dfs(c.id,np)) }; roots.forEach(r=>dfs(r.id,[])); return best },
+    lines(s,long) {
+        this.svg.innerHTML=''; const defs=document.createElementNS('http://www.w3.org/2000/svg','defs'); this.svg.appendChild(defs);
+        const filter=document.createElementNS('http://www.w3.org/2000/svg','filter'); filter.setAttribute('id','glow'); filter.innerHTML='<feGaussianBlur stdDeviation="3" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>'; defs.appendChild(filter);
+        Object.values(s.map).forEach(node => {
+            node.children.forEach((child, childIndex) => {
+                const pEl=document.getElementById('dom-'+node.id)?.querySelector('button'), cEl=document.getElementById('dom-'+child.id)?.querySelector('button');
+                if(!pEl||!cEl) return;
+                const pr=pEl.getBoundingClientRect(), cr=cEl.getBoundingClientRect(), tr=this.tree.getBoundingClientRect();
+                const x1=pr.left-tr.left+this.tree.scrollLeft+pr.width/2, y1=pr.top-tr.top+this.tree.scrollTop+pr.height/2;
+                const x2=cr.left-tr.left+this.tree.scrollLeft+cr.width/2, y2=cr.top-tr.top+this.tree.scrollTop+cr.height/2;
+                const isLong=long.has(node.id)&&long.has(child.id);
+                const gradId='g-'+node.id+'-'+child.id;
+                const grad=document.createElementNS('http://www.w3.org/2000/svg','linearGradient'); grad.setAttribute('id',gradId); grad.setAttribute('x1','0%'); grad.setAttribute('y1','0%'); grad.setAttribute('x2','0%'); grad.setAttribute('y2','100%');
+                const s1=document.createElementNS('http://www.w3.org/2000/svg','stop'); s1.setAttribute('offset','0%'); s1.setAttribute('stop-color',node.user.color);
+                const s2=document.createElementNS('http://www.w3.org/2000/svg','stop'); s2.setAttribute('offset','100%'); s2.setAttribute('stop-color',child.user.color);
+                grad.appendChild(s1); grad.appendChild(s2); defs.appendChild(grad);
+                const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+                const offsetY = (childIndex - (node.children.length-1)/2) * 12;
+                const cpY = y1 + (y2 - y1) / 2 + offsetY;
+                path.setAttribute('d',`M ${x1} ${y1} C ${x1} ${cpY}, ${x2} ${cpY}, ${x2} ${y2}`);
+                path.setAttribute('stroke',`url(#${gradId})`); path.setAttribute('stroke-width',isLong?'4':'2.5'); path.setAttribute('fill','none'); path.setAttribute('opacity',isLong?'.9':'.65');
+                if(isLong) path.setAttribute('filter','url(#glow)');
+                this.svg.appendChild(path);
+            });
+        });
+    },
+    recenter() {
+        const approved=S.nodes.filter(n=>n.status==='approved'); if(!approved.length) return;
+        const s=this._build(approved), lp=this.longest(s,s.roots); if(!lp.length) return;
+        const el=document.getElementById('dom-'+lp[lp.length-1]); if(!el) return;
+        const cr=this.tree.getBoundingClientRect(), er=el.getBoundingClientRect();
+        this.tree.scrollTo({left:Math.max(0,this.tree.scrollLeft+er.left-cr.left-cr.width/2+er.width/2),top:Math.max(0,this.tree.scrollTop+er.top-cr.top-cr.height/2+er.height/2),behavior:'smooth'});
+    },
+    home() {
+        const approved = S.nodes.filter(n => n.status==='approved' && !n.parentId);
+        if (!approved.length) return;
+        const el = document.getElementById('dom-'+approved[0].id);
+        if (!el) return;
+        const cr = this.tree.getBoundingClientRect(), er = el.getBoundingClientRect();
+        this.tree.scrollTo({left:Math.max(0,this.tree.scrollLeft+er.left-cr.left-cr.width/2+er.width/2),top:Math.max(0,this.tree.scrollTop+er.top-cr.top-cr.height/2+er.height/2),behavior:'smooth'});
+    }
+};
+
+// ========= UI =========
+const U = {
+    parentId: null,
+    init() {
+        S.user = USERS[0];
+        USERS.forEach((u,i) => { const b=document.createElement('button'); b.id='tog-'+u.id; b.className=`py-2 rounded text-xs font-bold border ${i?'bg-transparent border-transparent text-gray-500':'bg-gray-800'}`; b.style.color=i?u.color:''; b.style.borderColor=i?u.color:'transparent'; b.innerText=u.name; b.onclick=()=>U.selUser(u.id); document.getElementById('users').appendChild(b) });
+        document.getElementById('btnHome').onclick = () => R.home();
+        document.getElementById('btnFocus').onclick = () => { S.focus=!S.focus; document.getElementById('btnFocus').classList.toggle('focus',S.focus); U.refresh() };
+        document.getElementById('btnMove').onclick = () => { S.move=!S.move; const b=document.getElementById('btnMove'), mb=document.getElementById('moveBanner'); if(S.move) { document.body.classList.add('move'); b.classList.replace('bg-gray-700','bg-cyan-700'); b.classList.replace('text-gray-300','text-white'); b.classList.add('move-ind'); mb.classList.remove('hidden') } else { document.body.classList.remove('move'); b.classList.replace('bg-cyan-700','bg-gray-700'); b.classList.replace('text-white','text-gray-300'); b.classList.remove('move-ind'); mb.classList.add('hidden'); U.clearMove() } };
+        document.getElementById('btnLongest').onclick = () => U.longestView();
+        document.getElementById('btnRoot').onclick = () => U.input(null);
+        document.getElementById('btnExport').onclick = () => U.exportData();
+        document.getElementById('btnReset').onclick = () => U.resetAll();
+        document.getElementById('btnZoomIn').onclick = () => U.changeZoom(0.1);
+        document.getElementById('btnZoomOut').onclick = () => U.changeZoom(-0.1);
+        document.getElementById('search').addEventListener('input', e => { S.search=e.target.value.trim().toLowerCase(); U.refresh() });
+        document.getElementById('btnCancel').onclick = () => document.getElementById('inputModal').classList.add('hidden');
+        document.getElementById('btnValid').onclick = () => U.validate();
+        document.getElementById('textContent').addEventListener('input', () => U.charUpdate());
+        document.getElementById('charLimit').addEventListener('change', () => U.charUpdate());
+
+        document.getElementById('btnConfirmNo').onclick = () => { document.getElementById('confirmModal').classList.add('hidden'); window._deleteTarget = null; window._resetConfirm = false; };
+        document.getElementById('btnConfirmYes').onclick = () => {
+            if (window._deleteTarget) U.confirmDelete();
+            else if (window._resetConfirm) U.confirmReset();
+        };
+
+        const tree = R.tree;
+        let isDown = false, startX, startY, scrollLeft, scrollTop;
+        tree.addEventListener('mousedown', (e) => {
+            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            isDown = true;
+            startX = e.pageX - tree.offsetLeft;
+            startY = e.pageY - tree.offsetTop;
+            scrollLeft = tree.scrollLeft;
+            scrollTop = tree.scrollTop;
+        });
+        window.addEventListener('mouseup', () => { isDown = false; });
+        tree.addEventListener('mouseleave', () => { isDown = false; });
+        tree.addEventListener('mousemove', (e) => {
+            if (!isDown) return;
+            e.preventDefault();
+            const x = e.pageX - tree.offsetLeft;
+            const y = e.pageY - tree.offsetTop;
+            tree.scrollLeft = scrollLeft - (x - startX);
+            tree.scrollTop = scrollTop - (y - startY);
+        });
+
+        tree.addEventListener('click', (e) => {
+            if (S.move && (e.target === tree || e.target.id === 'tree')) U.clearMove();
+        });
+        document.addEventListener('keydown', e => U.keys(e));
+    },
+    changeZoom(delta) {
+        const newZoom = Math.min(2, Math.max(0.5, S.zoom + delta));
+        if (newZoom !== S.zoom) {
+            S.zoom = newZoom;
+            document.getElementById('zoomLevel').innerText = Math.round(S.zoom * 100) + '%';
+            R.render();
+            R.recenter();
+        }
+    },
+    async start() { await NLP.init(); S.nodes = await DB.all(); S.rebuild(); U.refresh(); U.pending(); U.limitDisp(); document.getElementById('load').style.display='none' },
+    refresh() { R.render(); R.recenter() },
+    selUser(id) {
+        S.user = USERS.find(u=>u.id===id);
+        USERS.forEach(u => { const b=document.getElementById('tog-'+u.id); if(u.id===id) { b.className='py-2 rounded text-xs font-bold border bg-gray-800'; b.style.color=u.color; b.style.borderColor=u.color } else { b.className='py-2 rounded text-xs font-bold bg-transparent border-transparent text-gray-500'; b.style.color=''; b.style.borderColor='transparent' } });
+        U.refresh();  // ← correction : re-rend immédiat pour mettre à jour les boutons de suppression
+        U.pending();
+    },
+    input(parent) {
+        if (parent && U.pendingParent().length) { alert("Valide tes demandes en attente d'abord."); return }
+        U.parentId = parent;
+        document.getElementById('nodeTitle').value = '';
+        document.getElementById('textContent').value = '';
+        document.getElementById('charCount').innerText = '0 / --';
+        document.getElementById('charWarn').classList.add('hidden');
+        document.getElementById('btnValid').disabled = true; document.getElementById('btnValid').classList.add('opacity-50');
+        const rootOpts = document.getElementById('rootOpts'), modalTitle = document.getElementById('modalTitle');
+        if (parent === null) {
+            rootOpts.classList.remove('hidden'); rootOpts.classList.add('flex');
+            modalTitle.innerText = 'Créer la racine de la Shura';
+            document.getElementById('charLimit').value = S.charLimit;
+        } else {
+            rootOpts.classList.add('hidden'); rootOpts.classList.remove('flex');
+            modalTitle.innerText = 'Répondre à la contribution';
+        }
+        document.getElementById('inputModal').classList.remove('hidden');
+        U.charUpdate();
+    },
+    charUpdate() {
+        const text = document.getElementById('textContent').value;
+        const limit = U.parentId===null ? parseInt(document.getElementById('charLimit').value) : S.charLimit;
+        const cnt = text.length;
+        document.getElementById('charCount').innerText = limit===0 ? `${cnt} / illimité` : `${cnt} / ${limit}`;
+        const warn = document.getElementById('charWarn'), btn = document.getElementById('btnValid');
+        if (limit>0 && cnt>limit) { warn.classList.remove('hidden'); btn.disabled=true; btn.classList.add('opacity-50') }
+        else { warn.classList.add('hidden'); btn.disabled = cnt===0; btn.classList.toggle('opacity-50', cnt===0) }
+    },
+    async validate() {
+        const title = document.getElementById('nodeTitle').value.trim() || 'Sans titre';
+        const text = document.getElementById('textContent').value.trim(); if (!text) return;
+        if (U.parentId === null) { S.charLimit = parseInt(document.getElementById('charLimit').value); U.limitDisp() }
+        let status = 'approved';
+        if (U.parentId !== null) {
+            const siblings = S.nodes.filter(n => n.parentId===U.parentId).length;
+            status = siblings===0 ? 'approved' : 'pending';
+        }
+        const { keywords, sentiment, summary } = NLP.analyze(text);
+        const node = { id:'n'+Date.now(), parentId:U.parentId, title, user:S.user, status, text, keywords, sentiment, summary };
+        S.nodes.push(node); S.rebuild(); await DB.put(node);
+        document.getElementById('inputModal').classList.add('hidden');
+        U.refresh(); U.pending();
+    },
+    view(id) {
+        const n = S.map[id]; if (!n) return;
+        document.getElementById('viewTitle').innerText = n.title;
+        document.getElementById('viewContent').innerText = n.deletedByAdmin ? 'Message supprimé par l\'admin' : n.text;
+        document.getElementById('viewAuthor').innerText = 'Par '+n.user.name;
+        const sent = n.sentiment||0, se = sent>0.3?'😊 Positif':(sent<-0.3?'😠 Négatif':'😐 Neutre');
+        document.getElementById('viewSentiment').innerText = se;
+        document.getElementById('viewModal').classList.remove('hidden');
+    },
+    longestView() {
+        const approved = S.nodes.filter(n => n.status==='approved'); if (!approved.length) return;
+        const s = R._build(approved), lp = R.longest(s, s.roots);
+        const cont = document.getElementById('branchContent'); cont.innerHTML = '';
+        lp.forEach(id => {
+            const n = S.map[id]; if (!n) return;
+            const text = n.deletedByAdmin ? 'Message supprimé par l\'admin' : n.text;
+            const d = document.createElement('div'); d.className='p-3 bg-gray-900/50 rounded border border-gray-800';
+            d.innerHTML = `<p class="text-xs font-bold text-cyan-300">${n.title} <span style="color:${n.user.color}">(${n.user.name})</span></p><p class="text-sm text-gray-200 mt-1">${text}</p>`;
+            cont.appendChild(d);
+        });
+        document.getElementById('branchModal').classList.remove('hidden');
+    },
+    pendingParent() { return S.nodes.filter(n => n.status==='pending' && n.parentId && S.map[n.parentId]?.user.id===S.user.id) },
+    pendingForUser() {
+        return S.nodes.filter(n => {
+            if (n.status!=='pending' || !n.parentId) return false;
+            const p = S.map[n.parentId]; if (!p) return false;
+            if (p.user.id===S.user.id) return true;
+            return S.nodes.some(x => x.parentId===n.parentId && x.status==='approved' && x.user.id===S.user.id);
+        });
+    },
+    pending() {
+        const c = document.getElementById('pending'), p = U.pendingForUser();
+        if (!p.length) { c.classList.add('hidden'); c.innerHTML=''; return }
+        c.classList.remove('hidden');
+        let h = `<div class="text-[10px] uppercase text-yellow-400 font-bold mb-1">Demandes (${p.length})</div>`;
+        p.forEach(n => { h += `<div class="flex items-center justify-between bg-gray-900/80 rounded p-2 border border-gray-700"><span class="text-xs text-gray-300 truncate flex-1">${n.title}</span><div class="flex gap-1 ml-2"><button class="read-pending px-3 py-1 bg-cyan-700 text-white text-[10px] rounded font-bold" data-id="${n.id}">Lire</button><button class="approve px-3 py-1 bg-emerald-700 text-white text-[10px] rounded font-bold" data-id="${n.id}">✓</button><button class="reject px-3 py-1 bg-red-700 text-white text-[10px] rounded font-bold" data-id="${n.id}">✕</button></div></div>` });
+        c.innerHTML = h;
+        c.querySelectorAll('.read-pending').forEach(b => b.onclick = e => U.view(e.target.dataset.id));
+        c.querySelectorAll('.approve').forEach(b => b.onclick = e => U.approve(e.target.dataset.id));
+        c.querySelectorAll('.reject').forEach(b => b.onclick = e => U.reject(e.target.dataset.id));
+    },
+    async approve(id) { const n = S.map[id]; if (n) { n.status='approved'; await DB.put(n); U.refresh(); U.pending() } },
+    async reject(id) {
+        if (!U.pendingForUser().some(n=>n.id===id)) return;
+        const rm = new Set(); const rec = (i) => { rm.add(i); S.nodes.forEach(n => { if (n.parentId===i) rec(n.id) }) }; rec(id);
+        for (const i of rm) await DB.del(i);
+        S.nodes = S.nodes.filter(n => !rm.has(n.id)); S.rebuild(); U.refresh(); U.pending();
+    },
+    deleteNode(id) {
+        const node = S.map[id];
+        if (!node) return;
+        if (!S.isAdmin()) {
+            if (node.user.id !== S.user.id) {
+                alert("Tu ne peux supprimer que tes propres contributions.");
+                return;
+            }
+            if (U.hasChildren(id)) {
+                alert("Ce nœud a des réponses, tu ne peux pas le supprimer.");
+                return;
+            }
+        }
+        let msg;
+        if (S.isAdmin() && U.hasChildren(id)) {
+            msg = `Supprimer ce message ? Le contenu sera remplacé par "Message supprimé par l'admin".`;
+            window._deleteMode = 'replace';
+        } else {
+            msg = `Supprimer définitivement cette contribution et toutes ses réponses ?`;
+            window._deleteMode = 'delete';
+        }
+        document.getElementById('confirmMessage').innerText = msg;
+        window._deleteTarget = id;
+        window._resetConfirm = false;
+        document.getElementById('confirmModal').classList.remove('hidden');
+    },
+    async confirmDelete() {
+        const id = window._deleteTarget;
+        if (!id) return;
+        const node = S.map[id];
+        if (window._deleteMode === 'replace' && S.isAdmin() && U.hasChildren(id)) {
+            node.text = 'Message supprimé par l\'admin';
+            node.deletedByAdmin = true;
+            node.keywords = [];
+            node.sentiment = 0;
+            node.summary = '';
+            await DB.put(node);
+        } else {
+            const rm = new Set(); const rec = (i) => { rm.add(i); S.nodes.forEach(n => { if (n.parentId===i) rec(n.id) }) }; rec(id);
+            for (const i of rm) await DB.del(i);
+            S.nodes = S.nodes.filter(n => !rm.has(n.id));
+            S.rebuild();
+        }
+        U.refresh(); U.pending();
+        document.getElementById('confirmModal').classList.add('hidden');
+        window._deleteTarget = null;
+        window._deleteMode = null;
+    },
+    resetAll() {
+        document.getElementById('confirmMessage').innerText = "Réinitialiser toute la Shura ? Toutes les contributions seront effacées.";
+        window._deleteTarget = null;
+        window._resetConfirm = true;
+        document.getElementById('confirmModal').classList.remove('hidden');
+    },
+    async confirmReset() {
+        for (const n of S.nodes) await DB.del(n.id);
+        S.nodes = []; S.rebuild();
+        U.refresh(); U.pending();
+        document.getElementById('confirmModal').classList.add('hidden');
+        window._resetConfirm = false;
+    },
+    clearMove() { if (S.moveNode) { const el=document.getElementById('dom-'+S.moveNode); if(el) el.classList.remove('sel-move'); S.moveNode=null } },
+    hasChildren(id) { return S.nodes.some(n => n.parentId===id) },
+    isDesc(a,t) { return S.nodes.filter(n=>n.parentId===a).some(c => c.id===t || U.isDesc(c.id,t)) },
+    async moveClick(id) {
+        if (!S.move) return;
+        if (!S.moveNode) {
+            const n = S.map[id]; if (!n) return;
+            if (n.user.id!==S.user.id) { alert("Pas ta contribution"); return }
+            if (U.hasChildren(id)) { alert("A des enfants"); return }
+            S.moveNode = id; const el=document.getElementById('dom-'+id); if(el) el.classList.add('sel-move');
+        } else {
+            if (id===S.moveNode) { U.clearMove(); return }
+            if (U.isDesc(S.moveNode,id)) { alert("Cycle interdit"); return }
+            const n = S.map[S.moveNode]; if (n) { n.parentId=id; n.status='pending'; await DB.put(n) }
+            U.clearMove(); S.move=false; document.body.classList.remove('move');
+            const b=document.getElementById('btnMove'); b.classList.replace('bg-cyan-700','bg-gray-700'); b.classList.replace('text-white','text-gray-300'); b.classList.remove('move-ind');
+            document.getElementById('moveBanner').classList.add('hidden');
+            U.refresh(); U.pending();
+        }
+    },
+    async exportData() {
+        const data = S.nodes.map(n => ({id:n.id,parentId:n.parentId,title:n.title,user:n.user.id,status:n.status,text:n.text,keywords:n.keywords,sentiment:n.sentiment,summary:n.summary,deletedByAdmin:n.deletedByAdmin||false}));
+        const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+        const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`shura_${new Date().toISOString().slice(0,10)}.json`; a.click();
+    },
+    match(n) { const q=S.search; if(!q) return true; const t=(n.title||'').toLowerCase(), tx=(n.text||'').toLowerCase(), kw=(n.keywords||[]).join(' ').toLowerCase(), sm=(n.summary||'').toLowerCase(); return t.includes(q)||tx.includes(q)||kw.includes(q)||sm.includes(q) },
+    stats(d,b) { document.getElementById('depth').innerText=d; document.getElementById('branches').innerText=b },
+    limitDisp() { const lb={0:'Illimitée',500:'500 car.',1000:'1000',2000:'2000',5000:'5000'}; document.getElementById('limitDisp').innerText='📝 '+ (lb[S.charLimit]||'Illimitée') },
+    kbdSel(id) {
+        if (S.sel) { const p=document.getElementById('dom-'+S.sel); if(p) p.classList.remove('kbd') }
+        S.sel = id;
+        if (id) { const el=document.getElementById('dom-'+id); if(el) el.classList.add('kbd') }
+    },
+    keys(e) {
+        if (document.activeElement?.tagName==='INPUT'||document.activeElement?.tagName==='TEXTAREA'||!document.getElementById('inputModal').classList.contains('hidden')) return;
+        const approved=S.nodes.filter(n=>n.status==='approved'); if(!approved.length) return;
+        const s=R._build(approved), lp=R.longest(s,s.roots); if(!lp.length) return;
+        const bm={}; lp.forEach(id=>bm[id]=true);
+        switch(e.key) {
+            case 'ArrowRight': e.preventDefault(); if(S.sel&&bm[S.sel]){const nd=s.map[S.sel]; if(nd&&nd.children.length){const c=nd.children.find(x=>bm[x.id]); if(c)U.kbdSel(c.id)}}else U.kbdSel(lp[0]); break;
+            case 'ArrowLeft': e.preventDefault(); if(S.sel&&bm[S.sel]){const nd=s.map[S.sel]; if(nd&&nd.parentId)U.kbdSel(nd.parentId)}else U.kbdSel(lp[0]); break;
+            case ' ': e.preventDefault(); if(S.sel) U.view(S.sel); break;
+            case 'l': e.preventDefault(); U.longestView(); break;
+        }
+    }
+};
+
+window.addEventListener('load', () => { U.init(); U.start() });
+window.addEventListener('resize', () => { R.render(); R.recenter() });
+</script>
+
+<script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));}</script>
+</body>
+</html>
